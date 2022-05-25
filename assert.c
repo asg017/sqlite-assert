@@ -1,169 +1,266 @@
-/*
-** This SQLite extension implements xxx
-*/
-#include "sqlite3ext.h"
-SQLITE_EXTENSION_INIT1
 #include <assert.h>
 #include <string.h>
-#include <stdio.h>
 
+#include "sqlite3ext.h"
+SQLITE_EXTENSION_INIT1
 
-/*
-** Implementation of the assert() function.
-** TODO docs
-*/
-static void assertfunc(
-  sqlite3_context *context,
-  int argc,
-  sqlite3_value **argv
-){
-  sqlite3 *db = sqlite3_context_db_handle(context);
-  
-  assert( argc==1 || argc==2);
-  int i = sqlite3_value_int(argv[0]);
-  if(i == 0) {
-    char *zMsg;
-    if(argc ==2) {
-      const char *iMsg = (const char*)sqlite3_value_text(argv[1]);
-      char *zMsg = sqlite3_mprintf("Assertion error: %s", iMsg);
-      sqlite3_result_error(context, zMsg, -1);
-      sqlite3_result_error(context, zMsg, -1);
-      sqlite3_free(zMsg);
-    }
-    else {
-      zMsg = "Assert error.";
-      sqlite3_result_error(context, zMsg, -1);
-    }
+static void assertFunc(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+  int result = sqlite3_value_int(argv[0]);
+  if (result == 1) {
+    sqlite3_result_int(ctx, 1);
+    return;
   }
-  else {
-    //sqlite3_result_int(context, i);
-    sqlite3_result_text(context, "✅", 1, SQLITE_TRANSIENT);
+  char *zMsg = 0;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error");
+  if (zMsg == 0) {
+    sqlite3_result_error_nomem(ctx);
+    return;
   }
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
 }
 
-/*
-** Implementation of the assert_query() function.
-** TODO docs
-*/
-static void assertqueryfunc(
-  sqlite3_context *context,
-  int argc,
-  sqlite3_value **argv
-){
-  sqlite3 *db = sqlite3_context_db_handle(context);
-  assert( argc==1 || argc==2);
-  
-  const char *zSql = (const char*)sqlite3_value_text(argv[0]);
-  sqlite3_stmt *pStmt = 0;
-  int nCol;                   /* Number of columns in the result set */
-  int i;                      /* Loop counter */
-  int rc;
-  int n;
-  const char *z;
-  
-  if( zSql==0 ) return;
-  
-   while( zSql[0] ){
-    rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, &zSql);
-    if( rc ){
-      char *zMsg = sqlite3_mprintf("error SQL statement [%s]: %s",
-                                   zSql, sqlite3_errmsg(db));
-      sqlite3_finalize(pStmt);
-      sqlite3_result_error(context, zMsg, -1);
-      sqlite3_free(zMsg);
-      return;
-    }
-    if( !sqlite3_stmt_readonly(pStmt) ){
-      char *zMsg = sqlite3_mprintf("non-query: [%s]", sqlite3_sql(pStmt));
-      sqlite3_finalize(pStmt);
-      sqlite3_result_error(context, zMsg, -1);
-      sqlite3_free(zMsg);
-      return;
-    }
-    nCol = sqlite3_column_count(pStmt);
-    z = sqlite3_sql(pStmt);
-    n = (int)strlen(z);
-    
-    printf("starting \n");
-    int result;
-    while(1){
-      result = sqlite3_step(pStmt);
-      printf("result=%d\n", result);
-      switch(result) {
-        case SQLITE_DONE:
-        case SQLITE_INTERRUPT:
-          goto success;
-        case SQLITE_ERROR:
-          sqlite3_finalize(pStmt);
-          if(argc ==2) {
-            const char *iMsg = (const char*)sqlite3_value_text(argv[1]);
-            char *zMsg = sqlite3_mprintf("Assertion error: %s", iMsg);
-            sqlite3_result_error(context, zMsg, -1);
-            sqlite3_result_error(context, zMsg, -1);
-            sqlite3_free(zMsg);
-          }
-          else {
-            char *zMsg = "Assert error.";
-            sqlite3_result_error(context, zMsg, -1);
-          }
-          for(i=0; i<nCol; i++){
-            switch( sqlite3_column_type(pStmt,i) ){
-              case SQLITE_NULL: {
-                break;
-              }
-              case SQLITE_INTEGER: {
-                sqlite3_int64 v = sqlite3_column_int64(pStmt,i);
-                break;
-              }
-              case SQLITE_FLOAT: {
-                double r = sqlite3_column_double(pStmt,i);
-                break;
-              }
-              case SQLITE_TEXT: {
-                const unsigned char *z2 = sqlite3_column_text(pStmt, i);
-                break;
-              }
-              case SQLITE_BLOB: {
-                const unsigned char *z2 = sqlite3_column_blob(pStmt, i);
-                break;
-              }
-            }
-          }
-          return;
+static const char *azType[] = {"integer", "real", "text", "blob", "null"};
+static const char *typeName(sqlite3_value *v) {
+  return azType[sqlite3_value_type(v) - 1];
+}
 
-      }
-      if(result == SQLITE_DONE || result == SQLITE_INTERRUPT) break;
-      
-      //for(i=0; i<nCol; i++){}
-    }
-    success:
-    printf("done?\n");
-    sqlite3_finalize(pStmt);
+static void assertEqualFunc(sqlite3_context *ctx, int argc,
+                            sqlite3_value **argv) {
+  int ltype = sqlite3_value_type(argv[0]);
+  int rtype = sqlite3_value_type(argv[1]);
+
+  if (ltype != rtype) {
+    char *zMsg;
+    if (argc > 2)
+      zMsg =
+          sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[2]));
+    else
+      zMsg = sqlite3_mprintf("Assertion error: Type mismatch, %s != %s",
+                             typeName(argv[0]), typeName(argv[1]));
+
+    sqlite3_result_error(ctx, zMsg, -1);
+    sqlite3_free(zMsg);
+    return;
   }
+
+  switch (ltype) {
+  case SQLITE_INTEGER: {
+    int l = sqlite3_value_int64(argv[0]);
+    int r = sqlite3_value_int64(argv[1]);
+    if (l == r) {
+      sqlite3_result_int(ctx, 1);
+      return;
+    }
+    char *zMsg;
+    if (argc > 2)
+      zMsg =
+          sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[2]));
+    else
+      zMsg = sqlite3_mprintf("Assertion error: %d != %d", l, r);
+
+    sqlite3_result_error(ctx, zMsg, -1);
+    sqlite3_free(zMsg);
+    return;
+  }
+  case SQLITE_FLOAT: {
+    double l = sqlite3_value_double(argv[0]);
+    double r = sqlite3_value_double(argv[1]);
+    if (l == r) {
+      sqlite3_result_int(ctx, 1);
+      return;
+    }
+    char *zMsg;
+    if (argc > 2)
+      zMsg =
+          sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[2]));
+    else
+      zMsg = sqlite3_mprintf("Assertion error: %f != %f", l, r);
+
+    sqlite3_result_error(ctx, zMsg, -1);
+    sqlite3_free(zMsg);
+    return;
+
+    return;
+  }
+  case SQLITE_TEXT:
+  case SQLITE_BLOB: {
+    int lSize = sqlite3_value_bytes(argv[0]);
+    int rSize = sqlite3_value_bytes(argv[0]);
+
+    // TODO early catch, check sizes?
+
+    const void *l = (const void *)sqlite3_value_blob(argv[0]);
+    const void *r = (const void *)sqlite3_value_blob(argv[1]);
+    int rc = memcmp(l, r, lSize);
+    if (rc == 0) {
+      sqlite3_result_int(ctx, 1);
+      return;
+    }
+    if (l == r) {
+      sqlite3_result_int(ctx, 1);
+      return;
+    }
+    char *zMsg;
+    if (argc > 2)
+      zMsg =
+          sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[2]));
+    else
+      // TODO: shorten long stings like
+      // https://github.com/python/cpython/blob/3.10/Lib/unittest/util.py#L8-L22
+      // and maybe don't do BLOBs?
+      zMsg = sqlite3_mprintf("Assertion error: \"%s\" != \"%s\"", l, r);
+
+    sqlite3_result_error(ctx, zMsg, -1);
+    sqlite3_free(zMsg);
+    return;
+  }
+  case SQLITE_NULL: {
+    sqlite3_result_int(ctx, 1);
+    return;
+  }
+  }
+
+  char *zMsg;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error");
+
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
+}
+
+static void assertNotequalFunc(sqlite3_context *ctx, int argc,
+                               sqlite3_value **argv) {
+  int result = sqlite3_value_int(argv[0]);
+  if (result == 1) {
+    sqlite3_result_int(ctx, 1);
+    return;
+  }
+  char *zMsg;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error");
+
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
+}
+
+static void assertNullFunc(sqlite3_context *ctx, int argc,
+                           sqlite3_value **argv) {
+  int result = sqlite3_value_type(argv[0]);
+  if (result == SQLITE_NULL) {
+    sqlite3_result_int(ctx, 1);
+    return;
+  }
+  char *zMsg;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error, value not not null");
+
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
+}
+
+static void assertNotnullFunc(sqlite3_context *ctx, int argc,
+                              sqlite3_value **argv) {
+  int result = sqlite3_value_int(argv[0]);
+  if (result == 1) {
+    sqlite3_result_int(ctx, 1);
+    return;
+  }
+  char *zMsg;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error");
+
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
+}
+
+static void assertTypeFunc(sqlite3_context *ctx, int argc,
+                           sqlite3_value **argv) {
+  int actual = sqlite3_value_type(argv[0]);
+  char *expected = (char *)sqlite3_value_text(argv[1]);
+
+  /*switch(expected) {
+    case "null": {
+
+    }
+  }*/
+  if (actual == 1) {
+    sqlite3_result_int(ctx, 1);
+    return;
+  }
+  char *zMsg;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error");
+
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
+}
+
+static void assertSubtypeFunc(sqlite3_context *ctx, int argc,
+                              sqlite3_value **argv) {
+  int result = sqlite3_value_int(argv[0]);
+  if (result == 1) {
+    sqlite3_result_int(ctx, 1);
+    return;
+  }
+  char *zMsg;
+  if (argc > 1)
+    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+  else
+    zMsg = sqlite3_mprintf("Assertion error");
+
+  sqlite3_result_error(ctx, zMsg, -1);
+  sqlite3_free(zMsg);
 }
 
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
-int sqlite3_assert_init(
-  sqlite3 *db, 
-  char **pzErrMsg, 
-  const sqlite3_api_routines *pApi
-){
-  int rc = SQLITE_OK;
+    int sqlite3_assert_init(sqlite3 *db, char **pzErrMsg,
+                            const sqlite3_api_routines *pApi) {
   SQLITE_EXTENSION_INIT2(pApi);
-  (void)pzErrMsg;  /* Unused parameter */
-  rc = sqlite3_create_function(db, "assert", 1,
-                   SQLITE_UTF8|SQLITE_INNOCUOUS|SQLITE_DETERMINISTIC,
-                   0, assertfunc, 0, 0);
-  rc = sqlite3_create_function(db, "assert", 2,
-                   SQLITE_UTF8|SQLITE_INNOCUOUS|SQLITE_DETERMINISTIC,
-                   0, assertfunc, 0, 0);
-  rc = sqlite3_create_function(db, "assert_query", 1,
-                   SQLITE_UTF8|SQLITE_INNOCUOUS|SQLITE_DETERMINISTIC,
-                   0, assertqueryfunc, 0, 0);
-  rc = sqlite3_create_function(db, "assert_query", 2,
-                   SQLITE_UTF8|SQLITE_INNOCUOUS|SQLITE_DETERMINISTIC,
-                   0, assertqueryfunc, 0, 0);
-  return rc;
+  (void)pzErrMsg; /* Unused parameter */
+  const int flags = SQLITE_UTF8 | SQLITE_INNOCUOUS | SQLITE_DETERMINISTIC;
+  sqlite3_create_function(db, "assert", 1, flags, 0, assertFunc, 0, 0);
+  sqlite3_create_function(db, "assert", 2, flags, 0, assertFunc, 0, 0);
+
+  sqlite3_create_function(db, "assert_equal", 2, flags, 0, assertEqualFunc, 0,
+                          0);
+  sqlite3_create_function(db, "assert_equal", 3, flags, 0, assertEqualFunc, 0,
+                          0);
+
+  sqlite3_create_function(db, "assert_notequal", 2, flags, 0,
+                          assertNotequalFunc, 0, 0);
+  sqlite3_create_function(db, "assert_notequal", 3, flags, 0,
+                          assertNotequalFunc, 0, 0);
+
+  sqlite3_create_function(db, "assert_null", 1, flags, 0, assertNullFunc, 0, 0);
+  sqlite3_create_function(db, "assert_null", 2, flags, 0, assertNullFunc, 0, 0);
+
+  sqlite3_create_function(db, "assert_notnull", 1, flags, 0, assertNotnullFunc,
+                          0, 0);
+  sqlite3_create_function(db, "assert_notnull", 2, flags, 0, assertNotnullFunc,
+                          0, 0);
+
+  sqlite3_create_function(db, "assert_type", 2, flags, 0, assertTypeFunc, 0, 0);
+  sqlite3_create_function(db, "assert_type", 3, flags, 0, assertTypeFunc, 0, 0);
+
+  sqlite3_create_function(db, "assert_subtype", 2, flags, 0, assertSubtypeFunc,
+                          0, 0);
+  sqlite3_create_function(db, "assert_subtype", 3, flags, 0, assertSubtypeFunc,
+                          0, 0);
+  return SQLITE_OK;
 }
