@@ -5,7 +5,7 @@ EXT_PATH = "dist/assert0"
 
 FUNCTIONS = [
   "assert",
-  "assert_equal",
+  "assert_eq",
 ]
 
 MODULES = []
@@ -68,55 +68,55 @@ class TestAssert(unittest.TestCase):
   # Assertion error:  2 != Blob(n=2)
   # Assertion error:  2 != "abc\nxyz"
   # Assertion error:  2 != 'abcd\n    asdfasdfasdfasdfasdfasdfasdfasdfas[138 chars]asdf'
-  def test_assert_equal(self):
-    self.assertEqual(exec("select assert_equal(null, null)"), 1)
-    self.assertEqual(exec("select assert_equal(1, 1)"), 1)
-    self.assertEqual(exec("select assert_equal(1.0, 1.0)"), 1)
-    self.assertEqual(exec("select assert_equal('str', 'str')"), 1)
-    self.assertEqual(exec("select assert_equal(zeroblob(10), zeroblob(10))"), 1)
-    self.assertEqual(exec("select assert_equal(cast('abc' as blob), cast('abc' as blob))"), 1)
+  def test_assert_eq(self):
+    self.assertEqual(exec("select assert_eq(null, null)"), 1)
+    self.assertEqual(exec("select assert_eq(1, 1)"), 1)
+    self.assertEqual(exec("select assert_eq(1.0, 1.0)"), 1)
+    self.assertEqual(exec("select assert_eq('str', 'str')"), 1)
+    self.assertEqual(exec("select assert_eq(zeroblob(10), zeroblob(10))"), 1)
+    self.assertEqual(exec("select assert_eq(cast('abc' as blob), cast('abc' as blob))"), 1)
 
     with self.assertRaisesRegex(sqlite3.OperationalError,  "Assertion error: Type mismatch, integer != text - msg"):
-      exec("select assert_equal(1, 'a', 'msg')")
+      exec("select assert_eq(1, 'a', 'msg')")
 
     # type mismatches
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, integer != text"):
-      exec("select assert_equal(1, 'a')")
+      exec("select assert_eq(1, 'a')")
 
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, text != integer"):
-      exec("select assert_equal('a', 2)")
+      exec("select assert_eq('a', 2)")
 
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, blob != integer"):
-      exec("select assert_equal(zeroblob(1), 1)")
+      exec("select assert_eq(zeroblob(1), 1)")
 
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, null != integer"):
-      exec("select assert_equal(null, 1)")
+      exec("select assert_eq(null, 1)")
 
     # value mismatches
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Value mismatch 1 != 2"):
-      exec("select assert_equal(1, 2)")
+      exec("select assert_eq(1, 2)")
 
     with self.assertRaisesRegex(sqlite3.OperationalError,  "Assertion error: Value mismatch 1.010000 != 1.000000"):
-      exec("select assert_equal(1.01, 1.0)")
+      exec("select assert_eq(1.01, 1.0)")
 
     with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Value mismatch "abc" != "abb"'):
-      exec("select assert_equal('abc', 'abb')")
+      exec("select assert_eq('abc', 'abb')")
 
     with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Value mismatch "abc" != "abb"'):
-      exec("select assert_equal(cast('abc' as blob), cast('abb' as blob))")
+      exec("select assert_eq(cast('abc' as blob), cast('abb' as blob))")
 
    # Length mismatches
     with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Text length mismatch, 3 != 4'):
-      exec("select assert_equal('abc', 'abbb')")
+      exec("select assert_eq('abc', 'abbb')")
 
     with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Blob length mismatch, 3 != 4'):
-      exec("select assert_equal(cast('abc' as blob), cast('abbb' as blob))")
+      exec("select assert_eq(cast('abc' as blob), cast('abbb' as blob))")
 
-    #self.assertEqual(exec("select assert_equal(1, 1)"), 1)
+    #self.assertEqual(exec("select assert_eq(1, 1)"), 1)
     #with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error"):
-    #  exec("select assert_equal(1, 2)")
+    #  exec("select assert_eq(1, 2)")
     #with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: one equals two"):
-    #  exec("select assert_equal(1, 2, 'one equals two')")
+    #  exec("select assert_eq(1, 2, 'one equals two')")
 
 if __name__ == '__main__':
   unittest.main()

@@ -76,10 +76,12 @@ static const char *typeName(sqlite3_value *v) {
  */
 static void assertFunc(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
   int type = sqlite3_value_type(argv[0]);
-if ((type == SQLITE_INTEGER || type == SQLITE_FLOAT) && sqlite3_value_int(argv[0]) == 0) {
+  if ((type == SQLITE_INTEGER || type == SQLITE_FLOAT) &&
+      sqlite3_value_int(argv[0]) == 0) {
     char *zMsg = 0;
     if (argc > 1)
-      zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
+      zMsg =
+          sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
     else
       zMsg = sqlite3_mprintf("Assertion error");
     if (zMsg == 0) {
@@ -189,9 +191,7 @@ __declspec(dllexport)
   sqlite3_create_function(db, "assert", 1, flags, 0, assertFunc, 0, 0);
   sqlite3_create_function(db, "assert", 2, flags, 0, assertFunc, 0, 0);
 
-  sqlite3_create_function(db, "assert_equal", 2, flags, 0, assertEqualFunc, 0,
-                          0);
-  sqlite3_create_function(db, "assert_equal", 3, flags, 0, assertEqualFunc, 0,
-                          0);
+  sqlite3_create_function(db, "assert_eq", 2, flags, 0, assertEqualFunc, 0, 0);
+  sqlite3_create_function(db, "assert_eq", 3, flags, 0, assertEqualFunc, 0, 0);
   return SQLITE_OK;
 }
