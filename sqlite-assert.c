@@ -178,78 +178,6 @@ static void assertEqualFunc(sqlite3_context *ctx, int argc,
   }
 }
 
-/** assert_type(value, type [, message])
- *
- *
- */
-static void assertTypeFunc(sqlite3_context *ctx, int argc,
-                           sqlite3_value **argv) {
-
-  int actual = sqlite3_value_type(argv[0]);
-  char *expected = (char *)sqlite3_value_text(argv[1]);
-
-  if (actual == SQLITE_TEXT && sqlite3_stricmp(expected, "text") == 0) {
-    sqlite3_result_int(ctx, 1);
-    return;
-  }
-  if (actual == SQLITE_INTEGER && (sqlite3_stricmp(expected, "integer") == 0 ||
-                                   sqlite3_stricmp(expected, "int") == 0)) {
-    sqlite3_result_int(ctx, 1);
-    return;
-  }
-  if (actual == SQLITE_FLOAT && (sqlite3_stricmp(expected, "float") == 0 ||
-                                 sqlite3_stricmp(expected, "real") == 0)) {
-    sqlite3_result_int(ctx, 1);
-    return;
-  }
-  if (actual == SQLITE_BLOB && sqlite3_stricmp(expected, "blob") == 0) {
-    sqlite3_result_int(ctx, 1);
-    return;
-  }
-  char *zMsg;
-  if (argc > 2)
-    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
-  else {
-    zMsg = sqlite3_mprintf(
-        "Assertion error: Type mismatch, expected '%s' but got '%s'", expected,
-        typeName(argv[0]));
-  }
-
-  sqlite3_result_error(ctx, zMsg, -1);
-  sqlite3_free(zMsg);
-}
-
-/** assert_subtype(value, subtype [, message])
- *
- *
- */
-static void assertSubtypeFunc(sqlite3_context *ctx, int argc,
-                              sqlite3_value **argv) {
-  unsigned int actualSubtype = sqlite3_value_subtype(argv[0]);
-  int expectedType = sqlite3_value_type(argv[1]);
-  /*if (expectedType == SQLITE_TEXT) {
-    if (sqlite3_stricmp(sqlite3_value_text(argv[1]), "json") == 0) {
-    } else {
-      sqlite3
-    }
-  } else */
-  if (expectedType == SQLITE_INTEGER) {
-    int expected = sqlite3_value_int(argv[1]);
-    if (actualSubtype == expected) {
-      sqlite3_result_int(ctx, 1);
-      return;
-    }
-  }
-  char *zMsg;
-  if (argc > 1)
-    zMsg = sqlite3_mprintf("Assertion error: %s", sqlite3_value_text(argv[1]));
-  else
-    zMsg = sqlite3_mprintf("Assertion error");
-
-  sqlite3_result_error(ctx, zMsg, -1);
-  sqlite3_free(zMsg);
-}
-
 #ifdef _WIN32
 __declspec(dllexport)
 #endif
@@ -265,13 +193,5 @@ __declspec(dllexport)
                           0);
   sqlite3_create_function(db, "assert_equal", 3, flags, 0, assertEqualFunc, 0,
                           0);
-
-  sqlite3_create_function(db, "assert_type", 2, flags, 0, assertTypeFunc, 0, 0);
-  sqlite3_create_function(db, "assert_type", 3, flags, 0, assertTypeFunc, 0, 0);
-
-  sqlite3_create_function(db, "assert_subtype", 2, flags, 0, assertSubtypeFunc,
-                          0, 0);
-  sqlite3_create_function(db, "assert_subtype", 3, flags, 0, assertSubtypeFunc,
-                          0, 0);
   return SQLITE_OK;
 }
