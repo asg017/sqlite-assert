@@ -3,21 +3,33 @@ import unittest
 
 EXT_PATH = "dist/assert0"
 
-def connect():
+FUNCTIONS = [
+  "assert",
+  "assert_equal",
+  "assert_subtype",
+  "assert_type",
+  
+]
+
+MODULES = []
+
+
+def connect(ext):
   db = sqlite3.connect(":memory:")
 
-  db.execute("create table fbefore as select name from pragma_function_list")
-  db.execute("create table mbefore as select name from pragma_module_list")
+  db.execute("create table base_functions as select name from pragma_function_list")
+  db.execute("create table base_modules as select name from pragma_module_list")
 
   db.enable_load_extension(True)
-  db.load_extension(EXT_PATH)
+  db.load_extension(ext)
 
-  db.execute("create temp table fafter as select name from pragma_function_list")
-  db.execute("create temp table mafter as select name from pragma_module_list")
+  db.execute("create temp table loaded_functions as select name from pragma_function_list where name not in (select name from base_functions) group by 1 order by name")
+  db.execute("create temp table loaded_modules as select name from pragma_module_list where name not in (select name from base_modules) group by 1 order by name")
 
+  db.row_factory = sqlite3.Row
   return db
 
-db = connect()
+db = connect(EXT_PATH)
 
 def exec(query):
   return db.execute(query).fetchone()[0]
@@ -34,34 +46,24 @@ def exec_raises(query):
 
 class TestAssert(unittest.TestCase):
   def test_funcs(self):
-    funcs = list(map(lambda a: a[0], db.execute("select name from fafter where name not in (select name from fbefore) order by name").fetchall()))
-    self.assertEqual(funcs, [
-      "assert",
-      "assert",
-      "assert_equal",
-      "assert_equal",
-      "assert_notequal",
-      "assert_notequal",
-      "assert_notnull",
-      "assert_notnull",
-      "assert_null",
-      "assert_null",
-      "assert_subtype",
-      "assert_subtype",
-      "assert_type",
-      "assert_type",
-    ])
+    funcs = list(map(lambda a: a[0], db.execute("select name from loaded_functions").fetchall()))
+    self.assertEqual(funcs, FUNCTIONS)
+
+  def test_modules(self):
+    modules = list(map(lambda a: a[0], db.execute("select name from loaded_modules").fetchall()))
+    self.assertEqual(modules, MODULES)
+
 
   def test_assert(self):
     self.assertEqual(exec("select assert(1 == 1)"), 1)
+    self.assertEqual(exec("select assert(1 + 1 == 2)"), 1)
+    self.assertEqual(exec("select assert('abc ')"), 1)
 
     with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error'):
       exec("select assert(1 == 2)")
     
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: one equals two"):
       exec("select assert(1 == 2, 'one equals two')")
-    #self.assertEqual('abc', '''abcd
-    #asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdf''')
 
   # Assertion error:  1 != 2
   # Assertion error:  2 != "2"
@@ -76,30 +78,42 @@ class TestAssert(unittest.TestCase):
     self.assertEqual(exec("select assert_equal('str', 'str')"), 1)
     self.assertEqual(exec("select assert_equal(zeroblob(10), zeroblob(10))"), 1)
     self.assertEqual(exec("select assert_equal(cast('abc' as blob), cast('abc' as blob))"), 1)
-    with self.assertRaisesRegex(sqlite3.OperationalError,  "Assertion error: msg"):
+    
+    with self.assertRaisesRegex(sqlite3.OperationalError,  "Assertion error: Type mismatch, integer != text - msg"):
       exec("select assert_equal(1, 'a', 'msg')")
 
     # type mismatches
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, integer != text"):
       exec("select assert_equal(1, 'a')")
+
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, text != integer"):
       exec("select assert_equal('a', 2)")
+
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, blob != integer"):
       exec("select assert_equal(zeroblob(1), 1)")
+
     with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, null != integer"):
       exec("select assert_equal(null, 1)")
 
     # value mismatches
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: 1 != 2"):
+    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Value mismatch 1 != 2"):
       exec("select assert_equal(1, 2)")
-    with self.assertRaisesRegex(sqlite3.OperationalError,  "Assertion error: 1.010000 != 1.000000"):
+    
+    with self.assertRaisesRegex(sqlite3.OperationalError,  "Assertion error: Value mismatch 1.010000 != 1.000000"):
       exec("select assert_equal(1.01, 1.0)")
-    with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: "abc" != "abb"'):
+    
+    with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Value mismatch "abc" != "abb"'):
       exec("select assert_equal('abc', 'abb')")
-    with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: "abc" != "abb"'):
+    
+    with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Value mismatch "abc" != "abb"'):
       exec("select assert_equal(cast('abc' as blob), cast('abb' as blob))")
-    #with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: "abc" != "abb"'):
+   
+   # Length mismatches
+    with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Text length mismatch, 3 != 4'):
       exec("select assert_equal('abc', 'abbb')")
+    
+    with self.assertRaisesRegex(sqlite3.OperationalError, 'Assertion error: Blob length mismatch, 3 != 4'):
+      exec("select assert_equal(cast('abc' as blob), cast('abbb' as blob))")
     
     #self.assertEqual(exec("select assert_equal(1, 1)"), 1)
     #with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error"):
@@ -107,37 +121,15 @@ class TestAssert(unittest.TestCase):
     #with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: one equals two"): 
     #  exec("select assert_equal(1, 2, 'one equals two')")
 
-  def test_assert_notequal(self):
-    self.assertEqual(exec("select assert_notequal(1  1)"), 1)
-
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error"):
-      exec("select assert(1 == 2)")
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: one equals two"):
-      exec("select assert(1 == 2, 'one equals two')")
-    
-  def test_assert_null(self):
-    self.assertEqual(exec("select assert_null(null)"), 1)
-    self.assertEqual(exec("select assert_null(nullif(1,1))"), 1)
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error, value not not null"):
-      exec("select assert_null('')")
-
-
-  def test_assert_notnull(self):
-    self.skipTest("TODO")
-    self.assertEqual(exec("select assert(1 == 1)"), 1)
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error"):
-      exec("select assert(1 == 2)")
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: one equals two"):
-      exec("select assert(1 == 2, 'one equals two')")
-
   def test_assert_type(self):
-    self.skipTest("TODO")
-    self.assertEqual(exec("select assert(1 == 1)"), 1)
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error"):
-      exec("select assert(1 == 2)")
-    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: one equals two"):
-      exec("select assert(1 == 2, 'one equals two')")
-
+    self.assertEqual(exec("select assert_type(1, 'integer')"), 1)
+    self.assertEqual(exec("select assert_type(1.0, 'real')"), 1)
+    self.assertEqual(exec("select assert_type('abc', 'text')"), 1)
+    self.assertEqual(exec("select assert_type(zeroblob(1), 'blob')"), 1)
+    
+    with self.assertRaisesRegex(sqlite3.OperationalError, "Assertion error: Type mismatch, expected 'real' but got 'integer'"):
+      exec("select assert_type(1, 'real')")
+    
   def test_assert_subtype(self):
     self.skipTest("TODO")
     self.assertEqual(exec("select assert(1 == 1)"), 1)

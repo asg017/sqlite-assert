@@ -18,25 +18,41 @@ ifdef CONFIG_LINUX
 LOADABLE_EXTENSION=so
 endif
 
+TARGET_OBJ=dist/libsqliteassert.o
+TARGET_AR=dist/libsqliteassert.a
 TARGET_LOADABLE=dist/assert0.$(LOADABLE_EXTENSION)
+TARGET_SQLITE3=dist/sqlite3
 
 clean:
 	rm dist/*
 
-FORMAT_FILES=assert.h assert.c core_init.c
+FORMAT_FILES=sqlite-assert.h sqlite-assert.c core_init.c
 
 format: $(FORMAT_FILES)
 	clang-format -i $(FORMAT_FILES)
 
 loadable: $(TARGET_LOADABLE) $(TARGET_LOADABLE_NOFS)
-cli: $(TARGET_CLI)
 sqlite3: $(TARGET_SQLITE3)
-sqljs: $(TARGET_SQLJS)
 
-$(TARGET_LOADABLE): assert.c
+$(TARGET_LOADABLE): sqlite-assert.c
 	gcc -Isqlite \
 	$(LOADABLE_CFLAGS) \
 	$< -o $@
+
+$(TARGET_OBJ): sqlite-assert.c 
+	gcc -Isqlite \
+	-c \
+	-DSQLITE_CORE \
+	$< -o $@
+
+$(TARGET_AR): $(TARGET_OBJ)
+	ar rcs $@ $<
+
+$(TARGET_SQLITE3): dist/sqlite3-extra.c sqlite/shell.c sqlite-assert.c
+	gcc \
+	-DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION=1 \
+	-DSQLITE_EXTRA_INIT=core_init \
+	-I./ -I./sqlite dist/sqlite3-extra.c sqlite/shell.c sqlite-assert.c -o $@
 
 dist/sqlite3-extra.c: sqlite/sqlite3.c core_init.c
 	cat sqlite/sqlite3.c core_init.c > $@
