@@ -117,7 +117,7 @@ bindings/go/assert/sqlite-assert.h: sqlite-assert.h
 
 
 python: $(TARGET_WHEELS) $(TARGET_LOADABLE) bindings/python/setup.py bindings/python/sqlite_assert/__init__.py scripts/rename-wheels.py
-	cp $(TARGET_LOADABLE_ASSERT) $(INTERMEDIATE_PYPACKAGE_EXTENSION)
+	cp $(TARGET_LOADABLE) $(INTERMEDIATE_PYPACKAGE_EXTENSION)
 	rm $(TARGET_WHEELS)/*.wheel || true
 	pip3 wheel bindings/python/ -w $(TARGET_WHEELS)
 	python3 scripts/rename-wheels.py $(TARGET_WHEELS) $(RENAME_WHEELS_ARGS)

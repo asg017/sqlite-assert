@@ -1,0 +1,8 @@
+{
+  "name": "sqlite-assert",
+  "version": "0.0.1-alpha.1",
+  "github": "https://github.com/asg017/sqlite-assert",
+  "tasks": {
+    "test": "deno test --unstable -A test.ts"
+  }
+}
