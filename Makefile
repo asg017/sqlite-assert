@@ -45,13 +45,13 @@ static: $(TARGET_STATIC)
 
 $(TARGET_LOADABLE): sqlite-assert.c $(prefix)
 	gcc -fPIC -shared \
-	-Ivendor \
+	-Isqlite \
 	-O3 \
 	$(DEFINE_ASSERT) $(CFLAGS) \
 	$< -o $@
 
 $(TARGET_STATIC_ASSERT): sqlite-assert.c $(prefix)
-	gcc -Ivendor $(DEFINE_ASSERT) $(CFLAGS) -DSQLITE_CORE \
+	gcc -Isqlite $(DEFINE_ASSERT) $(CFLAGS) -DSQLITE_CORE \
 	-O3 -c  $< -o $(prefix)/assert.o
 	ar rcs $@ $(prefix)/assert.o
 
