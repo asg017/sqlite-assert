@@ -1,13 +1,12 @@
 # sqlite-assert Documentation
 
-A full reference to every function and module that sqlite-assert offers.
+A full reference to every function that sqlite-assert offers.
 
 As a reminder, sqlite-assert follows semver and is pre v1, so breaking changes are to be expected.
 
 ## API Reference
 
-<h3 name=assert_version> <code>assert_version()</code></h3>
-
+### `assert_version()`
 Returns the semver version string of the current version of sqlite-assert.
 
 ```sql
@@ -15,10 +14,8 @@ select assert_version();
 -- "v0.0.0"
 ```
 
-<h3 name=assert_debug> <code>assert_debug()</code></h3>
-
-Returns a debug string of various info about sqlite-assert, including
-the version string, build date, commit hash, and cwalk version.
+### `assert_debug()`
+Returns a debug string containing information about sqlite-assert, including version, build date, commit hash, and cwalk version.
 
 ```sql
 select assert_debug();
@@ -30,43 +27,33 @@ cwalk version: v1.2.6
 */
 ```
 
-<h3 name=assert> <code>assert(value [, message])</code></h3>
+### `assert(value [, message])`
+Throws an error if the provided value evaluates to `0` or `FALSE`. Returns `1` if the assertion passes.
 
-If value evaluates to `1` or `TRUE`, then `1` is returned. Otherwise, an error is thrown with the message `"Assertion error"`.
-
-If the assertion fails and `message` is passed in, then the error message will read `"Assertion error: {message}"`.
+- **Parameters**:
+  - `value`: The boolean expression to evaluate.
+  - `message`: Optional custom error message.
 
 ```sql
 select assert(1); -- 1
-select assert((1 + 1) == 2); -- 1
-select assert((1 + 1) == 3); -- Fails with "Assertion error"
-select assert((1 + 1) == 3, 'One does not equal three'); -- Fails with "Assertion error: One does not equal three"
-select assert((1 + 1) == 2); -- 1
+select assert(1 == 1); -- 1
+select assert(1 == 2); -- Fails with "Assertion error"
+select assert(1 == 2, 'One does not equal two'); -- Fails with "Assertion error: One does not equal two"
 ```
 
-<h3 name=assert_equals> <code>assert_equals(value1, value2 [, message])</code></h3>
+### `assert_eq(value1, value2 [, message])`
+Asserts that `value1` equals `value2`. Returns `1` if they are equal. Throws an error with a detailed message if they are not.
 
-Returns 1 if the given path is absolute, 0 otherwise.
-
-```sql
-select assert_("/usr/local/bin"); -- 1
-select assert_("./rel/to/me"); -- 0
-```
-
-<h3 name=assert_type> <code>assert_type(path, type)</code></h3>
-
-Returns 1 if the given path is absolute, 0 otherwise.
+- **Parameters**:
+  - `value1`: The first value to compare.
+  - `value2`: The second value to compare.
+  - `message`: Optional custom error message.
 
 ```sql
-select assert_("/usr/local/bin"); -- 1
-select assert_("./rel/to/me"); -- 0
-```
-
-<h3 name=assert_subtype> <code>assert_subtype(path, subtype)</code></h3>
-
-Returns 1 if the given path is absolute, 0 otherwise.
-
-```sql
-select assert_("/usr/local/bin"); -- 1
-select assert_("./rel/to/me"); -- 0
+select assert_eq(1 + 2, 3); -- 1
+select assert_eq("alex", lower("ALEX")); -- 1
+select assert_eq(1 + 2, 4); -- Fails with "Assertion error: Value mismatch 3 != 4"
+select assert_eq(1, 1.0); -- Fails with "Assertion error: Type mismatch, integer != real"
+select assert_eq(' hello', 'Hello', 'Strings do not match'); 
+-- Fails with "Assertion error: Value mismatch " hello" != "Hello" - Strings do not match"
 ```
